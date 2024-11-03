@@ -1,0 +1,6 @@
+__pycache__
+db.sqlite3
+tempo-data
+tempo-wal
+grafana_data
+prometheus.yml
