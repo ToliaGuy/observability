@@ -1,0 +1,150 @@
+x-logging:
+  &default-logging
+  driver: "json-file"
+  options:
+    max-size: "1m"
+    max-file: "1"
+    tag: "{{.Name}}"
+
+x-common-labels: &default-labels
+  logging: "promtail"
+  logging_jobname: "containerlogs"
+
+services:
+  # Visualisation
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - ./config/grafana/datasources/grafana.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./config/grafana/plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml
+      - ./grafana_data:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=accessControlOnCall lokiLogsDataplane
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+  # Metrics
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+  # Traces
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+    volumes:
+      - ./config/tempo/tempo.yml:/etc/tempo/tempo.yml
+      - tempo_data:/tmp/tempo/traces
+      - tempo_wal:/var/tempo/wal
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+    # normally should solve this issue by
+    # docker volume inspect observe_tempo_wal
+    # sudo chmod -R 777 /path/to/tempo_wal
+    user: root  # Run as root to bypass permissions on Windows
+
+  # Logs
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ./config/loki/loki.yaml:/etc/loki/loki.yaml
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+  # Logs collection
+  promtail:
+    image:  grafana/promtail:3.0.0
+    container_name: promtail
+    volumes:
+      - ./config/promtail/promtail.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+  # System (node) metrics
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+  # Container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+        # https://github.com/google/cadvisor/issues/1565#issuecomment-718812180
+      - /var/run/docker.sock:/var/run/docker.sock
+      #- /dev/disk:/dev/disk:ro
+    cpus: 0.5
+    mem_limit: 512m
+    networks:
+      - observability-network
+    logging: *default-logging
+    labels:
+      <<: *default-labels
+
+
+networks:
+  observability-network:
+    name: observability-network
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  tempo_data:
+  tempo_wal:
