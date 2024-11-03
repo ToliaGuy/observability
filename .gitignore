@@ -4,3 +4,4 @@ tempo-data
 tempo-wal
 grafana_data
 prometheus.yml
+metrics.py
