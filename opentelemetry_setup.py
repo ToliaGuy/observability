@@ -13,6 +13,9 @@ from opentelemetry.instrumentation.django import DjangoInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
 
+from opentelemetry.propagate import set_global_textmap
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,3 +43,7 @@ def setup_tracing():
 
     Psycopg2Instrumentor().instrument()
     logger.info("Psycopg2 instrumentation enabled")
+
+    # Set global propagator for trace context propagation
+    set_global_textmap(TraceContextTextMapPropagator())
+    logger.info("TraceContextTextMapPropagator set as global propagator")
