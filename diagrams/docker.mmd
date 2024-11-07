@@ -1,0 +1,31 @@
+graph TD
+    subgraph ObservabilityNetwork
+        direction LR
+
+        Grafana[Grafana]
+        Prometheus[Prometheus]
+        Tempo[Tempo]
+        Loki[Loki]
+        Promtail[Promtail]
+        NodeExporter[Node Exporter]
+        cAdvisor[cAdvisor]
+
+        Grafana -- Pulls metrics --> Prometheus
+        Grafana -- Pulls traces --> Tempo
+        Grafana -- Pulls logs --> Loki
+        Prometheus -- Collects metrics --> NodeExporter
+        Prometheus -- Collects container metrics --> cAdvisor
+        Promtail -- Sends logs --> Loki
+    end
+
+    subgraph MyAppNetwork
+        MYAPP[MY-APP]
+    end
+
+    %% Connections between MyApp and Observability Stack
+    MYAPP -->|Metrics| Prometheus
+    MYAPP -->|Traces| Tempo
+    MYAPP -->|Logs| Promtail
+
+    %% Access to Both Networks
+    MYAPP -- Connects to --> ObservabilityNetwork
